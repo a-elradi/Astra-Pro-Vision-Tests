@@ -1,11 +1,3 @@
-"""
-Depth-stream.py — CORRECTED
-Fixes:
-- Added colormap for readable depth visualization
-- Added center distance display with region averaging
-- Added invalid pixel filtering
-- Added minimum distance filter (Astra Pro min = 600mm)
-"""
 
 from openni import openni2
 import numpy as np
@@ -21,16 +13,9 @@ depth_stream.start()
 
 print("Depth stream started... Press Q to quit")
 
-# ── HELPER: safe region-averaged depth ──────────────────────────────────────
+
 def get_depth_at(depth_image, x, y, region=10):
-    """
-    Returns average depth in mm at (x,y) using region x region window.
-    Filters out:
-      - Zero values (invalid pixels)
-      - Values below 600mm (Astra Pro minimum range)
-      - Values above 8000mm (Astra Pro maximum range)
-    Returns 0 if no valid reading found.
-    """
+  
     h, w = depth_image.shape
     x1 = max(0, x - region)
     x2 = min(w, x + region)
@@ -47,7 +32,7 @@ def get_depth_at(depth_image, x, y, region=10):
 
     return int(np.mean(valid))
 
-# ── MAIN LOOP ────────────────────────────────────────────────────────────────
+
 cv2.namedWindow("Depth Colormap", cv2.WINDOW_NORMAL)
 
 while True:
@@ -58,16 +43,16 @@ while True:
     depth_image = np.frombuffer(frame_data, dtype=np.uint16).copy()
     depth_image = depth_image.reshape((480, 640))
 
-    # FIX: Normalize only valid range for better contrast
+    
     display = depth_image.copy().astype(np.float32)
     display = np.clip(display, 600, 4000)  # clip to useful range
     display = cv2.normalize(display, None, 0, 255, cv2.NORM_MINMAX)
     display = np.uint8(display)
 
-    # FIX: Apply colormap — much more readable than grayscale
+    
     colormap = cv2.applyColorMap(display, cv2.COLORMAP_JET)
 
-    # FIX: Show center distance with region averaging
+    
     cx, cy = 320, 240
     dist = get_depth_at(depth_image, cx, cy)
 

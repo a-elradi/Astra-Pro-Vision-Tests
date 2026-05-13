@@ -1,31 +1,18 @@
-"""
-visualservoing.py — CORRECTED
-Fixes:
-- Region-averaged depth (10x10 patch) instead of single pixel
-- Invalid depth filtering (0, <600mm, >8000mm removed)
-- Removed CAP_DSHOW (Windows-only, crashes on Jetson)
-- Relaxed contour detection (4-6 corners)
-- Aspect ratio filter added
-- Depth stability buffer — average last N readings for smooth lift height
-- Better alignment threshold with hysteresis (enter at 10px, exit at 20px)
-- Added visual center line for easier alignment visualization
-- Added lift height output clearly displayed
-- Proportional correction scaled properly
-"""
+
 
 from openni import openni2
 import numpy as np
 import cv2
 from collections import deque
 
-# ── INIT ─────────────────────────────────────────────────────────────────────
+
 openni2.initialize(r"C:\OpenNI2\Bin")
 
 dev = openni2.Device.open_any()
 depth_stream = dev.create_depth_stream()
 depth_stream.start()
 
-# FIX: Removed CAP_DSHOW — works on both Windows and Jetson
+
 cap = cv2.VideoCapture(0)
 if not cap.isOpened():
     cap = cv2.VideoCapture(1)
@@ -33,16 +20,16 @@ if not cap.isOpened():
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-# FIX: Depth stability buffer — smooth out noisy readings
+
 DEPTH_BUFFER_SIZE = 10
 depth_buffer = deque(maxlen=DEPTH_BUFFER_SIZE)
 
-# Alignment state (hysteresis prevents flickering)
+
 ALIGN_ENTER_THRESHOLD = 10   # px — enter aligned state
 ALIGN_EXIT_THRESHOLD  = 20   # px — exit aligned state
 is_aligned = False
 
-# ── HELPER: region-averaged depth ────────────────────────────────────────────
+
 def get_depth_at(depth_image, x, y, region=10):
     """
     FIX: Average over region. Filter invalid and out-of-range values.
@@ -61,7 +48,7 @@ def get_depth_at(depth_image, x, y, region=10):
 
     return int(np.mean(valid))
 
-# ── HELPER: stable lift height from buffer ───────────────────────────────────
+
 def get_stable_depth(raw_depth):
     """
     FIX: Add to rolling buffer and return median.
@@ -75,7 +62,7 @@ def get_stable_depth(raw_depth):
 
     return int(np.median(depth_buffer))
 
-# ── HELPER: visual servo correction ──────────────────────────────────────────
+
 def visual_servo(box_cx, frame_width, Kp=0.008):
     """
     FIX: Kp adjusted (0.005 was too small, caused sluggish response).
@@ -93,11 +80,11 @@ def visual_servo(box_cx, frame_width, Kp=0.008):
 
     # Hysteresis logic
     if is_aligned:
-        # Already aligned — only exit if offset gets large
+        
         if abs(offset) > ALIGN_EXIT_THRESHOLD:
             is_aligned = False
     else:
-        # Not aligned — only enter if offset gets small
+        
         if abs(offset) < ALIGN_ENTER_THRESHOLD:
             is_aligned = True
 
@@ -106,13 +93,9 @@ def visual_servo(box_cx, frame_width, Kp=0.008):
 
     return correction, int(offset), is_aligned
 
-# ── HELPER: box detection ────────────────────────────────────────────────────
+
 def detect_box(rgb_frame, depth_image):
-    """
-    FIX: Accept 4-6 corner contours (not exactly 4).
-    FIX: Added aspect ratio filter.
-    FIX: Use region-averaged depth.
-    """
+   
     gray = cv2.cvtColor(rgb_frame, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     edges = cv2.Canny(blur, 40, 120)
@@ -136,7 +119,7 @@ def detect_box(rgb_frame, depth_image):
         peri = cv2.arcLength(cnt, True)
         approx = cv2.approxPolyDP(cnt, 0.03 * peri, True)
 
-        # FIX: Accept 4 to 6 corners
+        
         if not (4 <= len(approx) <= 6):
             continue
 
@@ -169,7 +152,7 @@ def detect_box(rgb_frame, depth_image):
 
     return None
 
-# ── MAIN LOOP ─────────────────────────────────────────────────────────────────
+
 print("Visual Servo started — Press Q to quit")
 
 while True:
@@ -183,7 +166,7 @@ while True:
     depth_image = np.frombuffer(depth_data, dtype=np.uint16).copy()
     depth_image = depth_image.reshape((480, 640))
 
-    # FIX: Draw center line for visual alignment reference
+    
     frame_w = frame.shape[1]
     frame_h = frame.shape[0]
     cv2.line(frame,
@@ -197,10 +180,10 @@ while True:
 
         x, y, w, h, cx, cy, stable_depth = result
 
-        # ── VISUAL SERVO ─────────────────────────────────────────────────
+        #  VISUAL SERVO
         correction, offset_px, aligned = visual_servo(cx, frame_w)
 
-        # ── DRAW ─────────────────────────────────────────────────────────
+        
         box_color = (0, 255, 0) if aligned else (0, 165, 255)
         cv2.rectangle(frame, (x, y), (x + w, y + h), box_color, 3)
         cv2.circle(frame, (cx, cy), 6, (0, 0, 255), -1)
@@ -211,7 +194,7 @@ while True:
                  (frame_w // 2, cy),
                  (255, 0, 255), 2)
 
-        # ── STATUS PANEL ─────────────────────────────────────────────────
+        # ── STATUS PANEL
         if aligned:
             status = "ALIGNED"
             status_color = (0, 255, 0)
@@ -234,7 +217,7 @@ while True:
         cv2.putText(frame, f"Correction: {correction:.4f}",
                     (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
 
-        # FIX: Lift height clearly displayed
+        
         if stable_depth > 0:
             cv2.putText(frame,
                         f"Lift Height: {stable_depth}mm ({stable_depth/10:.1f}cm)",
@@ -261,7 +244,7 @@ while True:
         cv2.putText(frame, "No box detected",
                     (10, 40),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-        # FIX: Clear buffer when box lost
+        
         depth_buffer.clear()
         is_aligned = False
 

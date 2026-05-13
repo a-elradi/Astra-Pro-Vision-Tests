@@ -1,20 +1,10 @@
-"""
-Box-measurement.py — CORRECTED
-Fixes:
-- Region-averaged depth reading (10x10 patch, not single pixel)
-- Invalid pixel filtering (zero values and out-of-range removed)
-- Minimum distance filter (Astra Pro min = 600mm)
-- Relaxed rectangle detection (4-6 corners instead of exactly 4)
-- Added aspect ratio filter to avoid thin noise contours
-- Added depth confidence indicator
-- Added real-world width/height estimation from depth
-"""
+
 
 import cv2
 import numpy as np
 from openni import openni2
 
-# ── INIT ─────────────────────────────────────────────────────────────────────
+
 openni2.initialize(r"C:\OpenNI2\Bin")
 
 dev = openni2.Device.open_any()
@@ -22,7 +12,7 @@ dev = openni2.Device.open_any()
 depth_stream = dev.create_depth_stream()
 depth_stream.start()
 
-# FIX: Try 0 first, then 1
+
 cap = cv2.VideoCapture(1)
 if not cap.isOpened():
     cap = cv2.VideoCapture(0)
@@ -30,11 +20,10 @@ if not cap.isOpened():
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-# Astra Pro camera intrinsics (approximate)
-# Used to convert pixel size to real-world cm
+
 FOCAL_LENGTH_PX = 570.0  # approximate for 640x480
 
-# ── HELPER: safe region-averaged depth ───────────────────────────────────────
+
 def get_depth_at(depth_image, x, y, region=10):
     """
     FIX: Average depth over region x region window.
@@ -64,7 +53,7 @@ def estimate_real_size(pixel_size, distance_mm):
         return 0
     return int((pixel_size * distance_mm) / FOCAL_LENGTH_PX)
 
-# ── MAIN LOOP ─────────────────────────────────────────────────────────────────
+
 while True:
 
     ret, frame = cap.read()
@@ -77,10 +66,10 @@ while True:
     depth_image = np.frombuffer(depth_data, dtype=np.uint16).copy()
     depth_image = depth_image.reshape((480, 640))
 
-    # ── BOX DETECTION ────────────────────────────────────────────────────────
+    # ── BOX DETECTION 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blurred, 40, 120)  # FIX: slightly lower thresholds
+    edges = cv2.Canny(blurred, 40, 120)  
 
     # FIX: Dilate edges to close small gaps in box outline
     kernel = np.ones((3, 3), np.uint8)
@@ -102,14 +91,13 @@ while True:
         peri = cv2.arcLength(cnt, True)
         approx = cv2.approxPolyDP(cnt, 0.03 * peri, True)
 
-        # FIX: Accept 4 to 6 corners instead of exactly 4
-        # Boxes at slight angles won't give exactly 4 corners
+        
         if not (4 <= len(approx) <= 6):
             continue
 
         x, y, w, h = cv2.boundingRect(approx)
 
-        # FIX: Aspect ratio filter — reject very thin shapes
+      
         aspect = w / h if h > 0 else 0
         if aspect < 0.3 or aspect > 3.5:
             continue
@@ -118,7 +106,7 @@ while True:
             best_area = area
             best_box = (x, y, w, h, approx)
 
-    # ── DRAW AND MEASURE ──────────────────────────────────────────────────────
+    # ── DRAW AND MEASURE 
     if best_box:
 
         x, y, w, h, approx = best_box
@@ -126,16 +114,16 @@ while True:
         cx = x + w // 2
         cy = y + h // 2
 
-        # FIX: Map RGB coords to depth coords safely
+        
         dx = int(cx * 640 / frame.shape[1])
         dy = int(cy * 480 / frame.shape[0])
         dx = np.clip(dx, 0, 639)
         dy = np.clip(dy, 0, 479)
 
-        # FIX: Region-averaged depth with confidence
+        
         distance_mm, confidence = get_depth_at(depth_image, dx, dy)
 
-        # FIX: Real-world size estimation
+        
         real_w_mm = estimate_real_size(w, distance_mm)
         real_h_mm = estimate_real_size(h, distance_mm)
 
