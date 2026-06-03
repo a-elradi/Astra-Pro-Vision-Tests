@@ -5,7 +5,7 @@ import cv2
 # Load pretrained model — downloads automatically (~6MB)
 model = YOLO("yolov8n.pt")  # n = nano, fastest on Jetson
 
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
 
 while True:
     ret, frame = cap.read()
